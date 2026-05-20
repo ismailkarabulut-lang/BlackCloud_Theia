@@ -1,0 +1,451 @@
+// === app/src/main/java/com/blackcloud/shell/ui/viewmodel/BlackCloudViewModel.kt ===
+package com.blackcloud.shell.ui.viewmodel
+
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.blackcloud.shell.action.ActionDispatcher
+import com.blackcloud.shell.action.ActionType
+import com.blackcloud.shell.action.CalendarHelper
+import com.blackcloud.shell.ui.components.ConnectionStatus
+import com.blackcloud.shell.ui.components.Message
+import com.blackcloud.shell.ui.components.MessageSender
+import com.blackcloud.shell.data.model.ChatRequest
+import com.blackcloud.shell.data.model.Project
+import com.blackcloud.shell.data.model.SseEvent
+import com.blackcloud.shell.data.repository.TheiaRepository
+import com.blackcloud.shell.service.BlackCloudForegroundService
+import com.blackcloud.shell.voice.VoiceInputManager
+import com.blackcloud.shell.voice.VoiceOutputManager
+import com.blackcloud.shell.voice.VoiceResult
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+/**
+ * PROJECT THEIA BLACKCLOUD Ana ViewModel Sınıfı.
+ * Ekranlar arası geçiş durumunu, sohbet akışlarını, ses giriş / çıkış yönetimini
+ * ve yerel Python çekirdeği (FastAPI) ile koordinasyonu sağlar.
+ */
+class BlackCloudViewModel(
+    private val context: Context,
+    private val repository: TheiaRepository = TheiaRepository(),
+    private val voiceInputManager: VoiceInputManager,
+    private val voiceOutputManager: VoiceOutputManager
+) : ViewModel() {
+
+    // Ekran durumları
+    enum class Screen {
+        ProjectSwitcher,
+        ChatWorkspace
+    }
+
+    private val _currentScreen = MutableStateFlow(Screen.ProjectSwitcher)
+    val currentScreen = _currentScreen.asStateFlow()
+
+    // Projeler listesi ve seçili proje
+    private val _projects = MutableStateFlow<List<Project>>(emptyList())
+    val projects = _projects.asStateFlow()
+
+    private val _activeProject = MutableStateFlow<Project?>(null)
+    val activeProject = _activeProject.asStateFlow()
+
+    // Sohbet akışı mesajları
+    private val _messages = MutableStateFlow<List<Message>>(emptyList())
+    val messages = _messages.asStateFlow()
+
+    private val _inputText = MutableStateFlow("")
+    val inputText = _inputText.asStateFlow()
+
+    // Bağlantı durumu ve otomatik yeniden bağlanma parametreleri
+    private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
+    val connectionStatus = _connectionStatus.asStateFlow()
+
+    private var sttJob: Job? = null
+    private var chatStreamJob: Job? = null
+    private var pingJob: Job? = null
+    
+    // Mikrofon ve konuşma ses durumu
+    private val _isListening = MutableStateFlow(false)
+    val isListening = _isListening.asStateFlow()
+
+    private val _voiceInputText = MutableStateFlow("")
+
+    private val _currentPendingAction = MutableStateFlow<ActionType?>(null)
+    val currentPendingAction = _currentPendingAction.asStateFlow()
+
+    private val sessionId = UUID.randomUUID().toString()
+
+    init {
+        // Foreground service'den gelen canlı bağlantı bilgisini izliyoruz
+        viewModelScope.launch {
+            BlackCloudForegroundService.isBackendAlive.collect { isAlive ->
+                _connectionStatus.value = if (isAlive) ConnectionStatus.CONNECTED else ConnectionStatus.DISCONNECTED
+            }
+        }
+
+        // ActionDispatcher'dan gelen asistan eylemlerini izle
+        viewModelScope.launch {
+            ActionDispatcher.pendingActions.collect { action ->
+                handleIncomingAction(action)
+            }
+        }
+
+        startPeriodicChecking()
+        loadProjects()
+    }
+
+    /**
+     * Yerel sunucudan projeleri yükler.
+     */
+    fun loadProjects() {
+        viewModelScope.launch {
+            val fetched = repository.getProjects()
+            if (fetched.isNotEmpty()) {
+                _projects.value = fetched
+                val active = repository.getActiveProject()
+                _activeProject.value = active
+            }
+        }
+    }
+
+    /**
+     * Bir projeyi aktif hale getirip sohbet odasını (Workspace) açar.
+     */
+    fun selectProject(project: Project) {
+        _activeProject.value = project
+        _currentScreen.value = Screen.ChatWorkspace
+        // Örnek başlangıç asistan karşılama iletisi
+        _messages.value = listOf(
+            Message(
+                id = UUID.randomUUID().toString(),
+                sender = MessageSender.ASSISTANT,
+                text = "${project.name} projesi yüklendi. Size nasıl destek olabilirim?",
+                isComplete = true
+            )
+        )
+    }
+
+    /**
+     * Proje seçim ekranına geri döner.
+     */
+    fun navigateBackToProjects() {
+        _currentScreen.value = Screen.ProjectSwitcher
+    }
+
+    /**
+     * Girdi metnini günceller.
+     */
+    fun updateInputText(text: String) {
+        _inputText.value = text
+    }
+
+    /**
+     * Asistan cevabını sesli okur.
+     */
+    fun speakMessage(text: String) {
+        voiceOutputManager.speak(text)
+    }
+
+    /**
+     * Metin mesajı gönderir ve asistan sse akışını başlatır.
+     */
+    fun sendMessage() {
+        val text = _inputText.value.trim()
+        if (text.isEmpty()) return
+
+        _inputText.value = ""
+        triggerChatQuery(text)
+    }
+
+    private fun triggerChatQuery(text: String) {
+        // Kullanıcı mesajını ekle
+        val userMsgId = UUID.randomUUID().toString()
+        val formattedUserMsg = Message(id = userMsgId, sender = MessageSender.USER, text = text, isComplete = true)
+        _messages.value = _messages.value + formattedUserMsg
+
+        // Asistan için boş mesaj taslağı oluştur
+        val assistantMsgId = UUID.randomUUID().toString()
+        val starterAssistantMsg = Message(id = assistantMsgId, sender = MessageSender.ASSISTANT, text = "", isComplete = false)
+        _messages.value = _messages.value + starterAssistantMsg
+
+        chatStreamJob?.cancel()
+        chatStreamJob = viewModelScope.launch {
+            val req = ChatRequest(
+                projectId = _activeProject.value?.id,
+                message = text,
+                sessionId = sessionId
+            )
+
+            repository.streamChat(req)
+                .catch { error ->
+                    updateAssistantMessage(assistantMsgId, "Sunucuyla olan bağlantıda teknik aksaklık oluştu: ${error.message}", true)
+                    handleNetworkFailure()
+                }
+                .collect { event ->
+                    when (event) {
+                        is SseEvent.TextChunk -> {
+                            appendAssistantText(assistantMsgId, event.text)
+                        }
+                        is SseEvent.Action -> {
+                            // Eylemi sisteme dağıt
+                            ActionDispatcher.dispatch(context, event)
+                        }
+                        is SseEvent.Metadata -> {
+                            // Doğrulama durumunu asistan balonuna ekle
+                            attachKkypMetadata(assistantMsgId, event.kkyp)
+                        }
+                        is SseEvent.Done -> {
+                            markAssistantMessageComplete(assistantMsgId)
+                        }
+                        is SseEvent.Error -> {
+                            updateAssistantMessage(assistantMsgId, "Hata: ${event.message}", true)
+                        }
+                    }
+                }
+        }
+    }
+
+    // Mesaj balonlarını güncelleme yardımcı fonksiyonları
+    private fun appendAssistantText(msgId: String, newText: String) {
+        _messages.value = _messages.value.map { msg ->
+            if (msg.id == msgId) {
+                msg.copy(text = msg.text + newText)
+            } else msg
+        }
+    }
+
+    private fun updateAssistantMessage(msgId: String, finalText: String, isComplete: Boolean) {
+        _messages.value = _messages.value.map { msg ->
+            if (msg.id == msgId) {
+                msg.copy(text = finalText, isComplete = isComplete)
+            } else msg
+        }
+    }
+
+    private fun attachKkypMetadata(msgId: String, metadata: com.blackcloud.shell.data.model.KkypMetadata) {
+        _messages.value = _messages.value.map { msg ->
+            if (msg.id == msgId) {
+                msg.copy(kkyp = metadata, isComplete = true)
+            } else msg
+        }
+    }
+
+    private fun markAssistantMessageComplete(msgId: String) {
+        _messages.value = _messages.value.map { msg ->
+            if (msg.id == msgId) {
+                msg.copy(isComplete = true)
+            } else msg
+        }
+    }
+
+    /**
+     * Mikrofon basılı tutulmaya başladığında STT dinlemesini başlatır.
+     */
+    fun startVoiceInput() {
+        _isListening.value = true
+        _voiceInputText.value = ""
+        sttJob?.cancel()
+        sttJob = viewModelScope.launch {
+            voiceInputManager.startListening().collect { result ->
+                when (result) {
+                    is VoiceResult.Success -> {
+                        _voiceInputText.value = result.text
+                    }
+                    is VoiceResult.Error -> {
+                        _isListening.value = false
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    /**
+     * Mikrofon bırakıldığında dinlemeyi bitirir ve toplanan metni asistan akışına yollar.
+     */
+    fun stopVoiceInput() {
+        _isListening.value = false
+        voiceInputManager.stopListening()
+        sttJob?.cancel()
+        sttJob = null
+
+        val voiceText = _voiceInputText.value.trim()
+        if (voiceText.isNotEmpty()) {
+            triggerChatQuery(voiceText)
+        }
+    }
+
+    /**
+     * Askıdaki eylemi kullanıcı onayından geçmesi için kaydeder.
+     */
+    private fun handleIncomingAction(action: ActionType) {
+        when (action) {
+            is ActionType.SpeakText -> {
+                speakMessage(action.text)
+            }
+            is ActionType.RequestVoiceInput -> {
+                viewModelScope.launch {
+                    delay(1000) // TTS kaydı bitsin diye hafif bekleme
+                    startVoiceInput()
+                }
+            }
+            else -> {
+                // Sadece takvim ve asıl onay isteyenleri Bottom Sheet'e yönlendiriyoruz
+                _currentPendingAction.value = action
+            }
+        }
+    }
+
+    /**
+     * Askıdaki (takvim vb.) eylemi yeşil ışık yakarak onaylar ve yerel işlemini icra eder.
+     */
+    fun confirmPendingAction(context: Context) {
+        val action = _currentPendingAction.value ?: return
+        _currentPendingAction.value = null
+
+        viewModelScope.launch {
+            val actionId = when (action) {
+                is ActionType.CreateCalendarEvent -> action.actionId ?: "unknown"
+                is ActionType.RequestUserConfirmation -> action.actionId
+                else -> "unknown"
+            }
+
+            var success = false
+            var msg = "Eylem tamamlanamadı."
+
+            when (action) {
+                is ActionType.CreateCalendarEvent -> {
+                    success = CalendarHelper.createEvent(
+                        context,
+                        title = action.title,
+                        startTimeIso = action.startTime,
+                        endTimeIso = action.endTime,
+                        description = action.description,
+                        location = action.location
+                    )
+                    msg = if (success) "Takvim etkinliği başarıyla kaydedildi." else "Takvime yazma hatası oluştu."
+                }
+                is ActionType.RequestUserConfirmation -> {
+                    success = true
+                    msg = "Kullanıcı işlemi onayladı."
+                }
+                else -> {}
+            }
+
+            // Backend'e geri rapor et
+            repository.reportActionResult(actionId, success, msg)
+        }
+    }
+
+    /**
+     * Askıdaki eylemi reddeder ve sunucuya geri bildirir.
+     */
+    fun dismissPendingAction() {
+        val action = _currentPendingAction.value ?: return
+        _currentPendingAction.value = null
+
+        viewModelScope.launch {
+            val actionId = when (action) {
+                is ActionType.CreateCalendarEvent -> action.actionId ?: "unknown"
+                is ActionType.RequestUserConfirmation -> action.actionId
+                else -> "unknown"
+            }
+            repository.reportActionResult(actionId, false, "Kullanıcı işlemi reddetti (Gatekeeper engeli).")
+        }
+    }
+
+    /**
+     * Bağlantı kesildiğinde otomatik exponential backoff mekanizmasını devreye alır.
+     * Denemeler: 2sn, 4sn, 8sn, 16sn. Sonrasında manuel moda geçilir.
+     */
+    private fun handleNetworkFailure() {
+        viewModelScope.launch {
+            _connectionStatus.value = ConnectionStatus.RECONNECTING
+            val backoffs = listOf(2000L, 4000L, 8000L, 16000L)
+            
+            for (delayMs in backoffs) {
+                delay(delayMs)
+                val alive = repository.ping()
+                if (alive) {
+                    _connectionStatus.value = ConnectionStatus.CONNECTED
+                    loadProjects()
+                    return@launch
+                }
+            }
+            // Tüm denemeler biterse kullanıcıya bırakıyoruz
+            _connectionStatus.value = ConnectionStatus.DISCONNECTED
+        }
+    }
+
+    /**
+     * Butondan elle yeniden bağlanmayı tetikler.
+     */
+    fun triggerManualReconnect() {
+        viewModelScope.launch {
+            _connectionStatus.value = ConnectionStatus.RECONNECTING
+            val alive = repository.ping()
+            if (alive) {
+                _connectionStatus.value = ConnectionStatus.CONNECTED
+                loadProjects()
+            } else {
+                _connectionStatus.value = ConnectionStatus.DISCONNECTED
+            }
+        }
+    }
+
+    private fun startPeriodicChecking() {
+        pingJob?.cancel()
+        pingJob = viewModelScope.launch {
+            while (true) {
+                delay(15000)
+                val alive = repository.ping()
+                if (alive) {
+                    if (_connectionStatus.value != ConnectionStatus.CONNECTED) {
+                        _connectionStatus.value = ConnectionStatus.CONNECTED
+                        loadProjects()
+                    }
+                } else {
+                    if (_connectionStatus.value == ConnectionStatus.CONNECTED) {
+                        handleNetworkFailure()
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        sttJob?.cancel()
+        chatStreamJob?.cancel()
+        pingJob?.cancel()
+        voiceOutputManager.shutdown()
+    }
+}
+
+/**
+ * ViewModel üretimi için özel fabrika (Factory) sınıfı.
+ * Ses servislerinin doğru Context ile başlatılabilmesini sağlar.
+ */
+class BlackCloudViewModelFactory(
+    private val context: Context,
+    private val repository: TheiaRepository = TheiaRepository()
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(BlackCloudViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return BlackCloudViewModel(
+                context = context,
+                repository = repository,
+                voiceInputManager = VoiceInputManager(context),
+                voiceOutputManager = VoiceOutputManager(context)
+            ) as T
+        }
+        throw IllegalArgumentException("Bilinmeyen ViewModel sınıfı")
+    }
+}

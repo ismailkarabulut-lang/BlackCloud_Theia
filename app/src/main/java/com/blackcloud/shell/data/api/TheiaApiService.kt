@@ -12,7 +12,7 @@ import retrofit2.http.Streaming
 
 /**
  * PROJECT THEIA BLACKCLOUD API'sine erişim arayüzü (Retrofit).
- * Yerel sunucuyla (Termux localhost) tüm iletişimi sağlar.
+ * Yerel sunucuyla (FastAPI backend) tüm iletişimi sağlar.
  */
 interface TheiaApiService {
 
@@ -22,7 +22,7 @@ interface TheiaApiService {
         @Body request: ChatRequest
     ): ResponseBody
 
-    @GET("ping")
+    @GET("health")
     suspend fun ping(): Response<Void>
 
     @GET("projects")
@@ -33,7 +33,7 @@ interface TheiaApiService {
 
     @POST("action/result")
     suspend fun reportActionResult(
-        @retrofit2.http.Body result: ActionResult
+        @Body result: ActionResult
     ): Response<Void>
 }
 

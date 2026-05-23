@@ -1,4 +1,4 @@
-// === app/src/main/java/com/blackcloud/shell/ui/screens/ModelSwitcherScreen.kt ===
+// === app/src/main/java/com/blackcloud/shell/ui/screens/ModelsMainframeScreen.kt ===
 package com.blackcloud.shell.ui.screens
 
 import androidx.compose.foundation.background
@@ -19,19 +19,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blackcloud.shell.data.model.ModelManager
 import com.blackcloud.shell.data.model.ModelProvider
+import com.blackcloud.shell.ui.viewmodel.BlackCloudViewModel
 
 @Composable
-fun ModelSwitcherScreen() {
+fun ModelsMainframeScreen(
+    viewModel: BlackCloudViewModel,
+    modifier: Modifier = Modifier
+) {
     var activeModel by remember { mutableStateOf(ModelManager.getActiveModel()) }
     val models = ModelManager.getAllModels()
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0F))
             .padding(16.dp)
     ) {
-        // Başlık
         Text(
             text = "NEURAL_STUDIO",
             color = Color(0xFF4FC3F7),
@@ -47,7 +50,6 @@ fun ModelSwitcherScreen() {
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Aktif model özeti
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -105,10 +107,7 @@ fun ModelCard(
     isActive: Boolean,
     onSelect: () -> Unit
 ) {
-    val borderColor = when {
-        isActive -> Color(0xFF4FC3F7)
-        else -> Color(0xFF222233)
-    }
+    val borderColor = if (isActive) Color(0xFF4FC3F7) else Color(0xFF222233)
     val statusColor = when {
         isActive -> Color(0xFF4FC3F7)
         model.isFree -> Color(0xFF4CAF50)

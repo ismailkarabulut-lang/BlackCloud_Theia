@@ -18,9 +18,9 @@ import java.io.IOException
  * PROJECT THEIA BLACKCLOUD Veri Deposu (Repository) Sınıfı.
  * SSE akışını ve diğer suspend API çağrılarını yönetir.
  */
-class TheiaRepository(
-    private val apiService: TheiaApiService = TheiaApiClient.service
-) {
+class TheiaRepository {
+    private val apiService: TheiaApiService
+        get() = TheiaApiClient.service
 
     /**
      * Yerel sunucuya ping atarak bağlantının durumunu test eder.

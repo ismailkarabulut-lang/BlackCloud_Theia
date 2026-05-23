@@ -11,7 +11,6 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
-import com.blackcloud.shell.data.model.ModelManager
 import com.blackcloud.shell.service.BlackCloudForegroundService
 import com.blackcloud.shell.ui.screens.BlackCloudMainScreen
 import com.blackcloud.shell.ui.theme.TheiaTheme
@@ -46,12 +45,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        
         // Edge To Edge Desteği (Sistem çubuğu bütünleşimi)
         enableEdgeToEdge()
-
-        // Model yöneticisini başlat
-        ModelManager.init(this)
 
         // Çalışma zamanında gerekli izinleri talep et (Sesli komut & Takvim entegrasyonu)
         requestPermissions(requiredPermissions, 123)
@@ -79,11 +75,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun bootForegroundService() {
-        val serviceIntent = Intent(this, BlackCloudForegroundService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+        try {
+            val serviceIntent = Intent(this, BlackCloudForegroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Safe fallback: try starting it as a background service if FGS is restricted
+            try {
+                val serviceIntent = Intent(this, BlackCloudForegroundService::class.java)
+                startService(serviceIntent)
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
         }
     }
 

@@ -15,6 +15,7 @@ import com.blackcloud.shell.data.model.ChatRequest
 import com.blackcloud.shell.data.model.Project
 import com.blackcloud.shell.data.model.SseEvent
 import com.blackcloud.shell.data.repository.TheiaRepository
+import com.blackcloud.shell.data.api.TheiaApiClient
 import com.blackcloud.shell.service.BlackCloudForegroundService
 import com.blackcloud.shell.voice.VoiceInputManager
 import com.blackcloud.shell.voice.VoiceOutputManager
@@ -45,6 +46,16 @@ class BlackCloudViewModel(
     private val _activeTheme = MutableStateFlow(loadPersistedTheme())
     val activeTheme = _activeTheme.asStateFlow()
 
+    private val apiPrefs = context.getSharedPreferences("theia_api_config", Context.MODE_PRIVATE)
+    private val _baseUrl = MutableStateFlow(loadPersistedBaseUrl())
+    val baseUrl = _baseUrl.asStateFlow()
+
+    private val _modelName = MutableStateFlow(loadPersistedModelName())
+    val modelName = _modelName.asStateFlow()
+
+    private val _apiKey = MutableStateFlow(loadPersistedApiKey())
+    val apiKey = _apiKey.asStateFlow()
+
     private fun loadPersistedTheme(): ThemeType {
         val savedName = themePrefs.getString("selected_theme", ThemeType.ELEGANT_DARK.name)
         return try {
@@ -54,9 +65,54 @@ class BlackCloudViewModel(
         }
     }
 
+    private fun loadPersistedBaseUrl(): String {
+        val savedUrl = apiPrefs.getString("base_url", "http://10.202.60.1:8000/api/") ?: "http://10.202.60.1:8000/api/"
+        TheiaApiClient.updateBaseUrl(savedUrl)
+        return TheiaApiClient.getBaseUrl()
+    }
+
+    private fun loadPersistedModelName(): String {
+        val savedModel = apiPrefs.getString("selected_model", "deep_synthesis_v4") ?: "deep_synthesis_v4"
+        TheiaApiClient.updateModelName(savedModel)
+        return savedModel
+    }
+
+    private fun loadPersistedApiKey(): String {
+        val savedKey = apiPrefs.getString("api_key", "") ?: ""
+        TheiaApiClient.updateApiKey(savedKey)
+        return savedKey
+    }
+
     fun setTheme(themeType: ThemeType) {
         _activeTheme.value = themeType
         themePrefs.edit().putString("selected_theme", themeType.name).apply()
+    }
+
+    fun setBaseUrl(newUrl: String) {
+        var sanitized = newUrl.trim()
+        if (sanitized.isNotEmpty()) {
+            if (!sanitized.endsWith("/")) {
+                sanitized += "/"
+            }
+            _baseUrl.value = sanitized
+            apiPrefs.edit().putString("base_url", sanitized).apply()
+            TheiaApiClient.updateBaseUrl(sanitized)
+            loadProjects()
+        }
+    }
+
+    fun setModelName(newModel: String) {
+        val trimmed = newModel.trim()
+        _modelName.value = trimmed
+        apiPrefs.edit().putString("selected_model", trimmed).apply()
+        TheiaApiClient.updateModelName(trimmed)
+    }
+
+    fun setApiKey(newKey: String) {
+        val trimmed = newKey.trim()
+        _apiKey.value = trimmed
+        apiPrefs.edit().putString("api_key", trimmed).apply()
+        TheiaApiClient.updateApiKey(trimmed)
     }
 
     // Ekran durumları

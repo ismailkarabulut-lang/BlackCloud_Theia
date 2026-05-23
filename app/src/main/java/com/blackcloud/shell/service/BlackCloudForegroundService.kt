@@ -56,14 +56,24 @@ class BlackCloudForegroundService : Service() {
         // İlk bildirimi kapalı/çevrimdışı olarak başlat
         val notification = buildStatusNotification(isBackendAlive.value)
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Safe fallback: try starting without type descriptor if restricted on Android 14+ / targetSdk 36
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
         }
 
         // 10 saniyede bir ping atıp durumu güncelleyen döngüyü başlat

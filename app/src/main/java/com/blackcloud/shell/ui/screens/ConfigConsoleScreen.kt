@@ -42,6 +42,9 @@ fun ConfigConsoleScreen(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
+    val activeBaseUrl by viewModel.baseUrl.collectAsState()
+    var urlInputText by remember(activeBaseUrl) { mutableStateOf(activeBaseUrl) }
+
     // Ses motoru yerel durumları (Örnek gerçek toggle)
     var sttEnabled by remember { mutableStateOf(true) }
     var ttsEnabled by remember { mutableStateOf(true) }
@@ -191,6 +194,46 @@ fun ConfigConsoleScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    Text(
+                        text = "MODEL API BAĞLANTI ADRESİ YAPILANDIRMASI",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = urlInputText,
+                        onValueChange = { urlInputText = it },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = Color(0x3B000000),
+                            unfocusedContainerColor = Color(0x1B000000)
+                        ),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            viewModel.setBaseUrl(urlInputText)
+                            Toast.makeText(context, "Bağlantı adresi güncellendi ve kaydedildi.", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("YENİ SUNUCU ADRESİNİ KAYDET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -225,6 +268,101 @@ fun ConfigConsoleScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // 4. MODEL VE MODEL API ANAHTARI AYARLARI
+            Text(
+                text = "NÖRAL MODEL VE API AYARLARI",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    color = TextSecondary,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val activeModelName by viewModel.modelName.collectAsState()
+            val activeApiKey by viewModel.apiKey.collectAsState()
+
+            var modelInputText by remember(activeModelName) { mutableStateOf(activeModelName) }
+            var apiInputText by remember(activeApiKey) { mutableStateOf(activeApiKey) }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0x0FFFFFFF)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "AKTİF LLM MODELİ (MODEL NAME)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = modelInputText,
+                        onValueChange = { modelInputText = it },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = Color(0x3B000000),
+                            unfocusedContainerColor = Color(0x1B000000)
+                        ),
+                        singleLine = true,
+                        placeholder = { Text("E.g. deep_synthesis_v4", color = TextSecondary) }
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "MODEL API ANAHTARI (BEARER TOKEN)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = apiInputText,
+                        onValueChange = { apiInputText = it },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = Color(0x3B000000),
+                            unfocusedContainerColor = Color(0x1B000000)
+                        ),
+                        singleLine = true,
+                        placeholder = { Text("Gerekirse Bearer Token girin...", color = TextSecondary) }
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Button(
+                        onClick = {
+                            viewModel.setModelName(modelInputText)
+                            viewModel.setApiKey(apiInputText)
+                            Toast.makeText(context, "Model ve API anahtarı ayarları kaydedildi.", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("YENİ MODEL AYARLARINI KAYDET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Otomatik Veri Eşitleme
             ConfigToggleItem(

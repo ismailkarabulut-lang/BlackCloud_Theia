@@ -1,55 +1,26 @@
-// app/src/main/java/com/blackcloud/shell/data/model/ModelManager.kt
 package com.blackcloud.shell.data.model
 
+import com.blackcloud.shell.data.api.TheiaApiClient
+
 /**
- * Kullanılabilir modelleri ve aktif seçimi yöneten singleton.
- * Aktif model değiştiğinde TheiaApiClient otomatik güncellenir.
+ * Siber modellerin yönetimini üstlenen merkezî yöneticidir.
  */
 object ModelManager {
-
     private val models = listOf(
-        ModelProvider(
-            modelId = "deep_synthesis_v4",
-            displayName = "Deep Synthesis v4",
-            description = "Varsayılan yerel model",
-            isFree = true
-        ),
-        ModelProvider(
-            modelId = "gemini-2.0-flash",
-            displayName = "Gemini 2.0 Flash",
-            description = "Google — hızlı ve ücretsiz",
-            isFree = true
-        ),
-        ModelProvider(
-            modelId = "gemini-2.5-pro",
-            displayName = "Gemini 2.5 Pro",
-            description = "Google — gelişmiş akıl yürütme",
-            isFree = false
-        ),
-        ModelProvider(
-            modelId = "claude-sonnet-4-6",
-            displayName = "Claude Sonnet 4.6",
-            description = "Anthropic — dengeli ve güçlü",
-            isFree = false
-        ),
-        ModelProvider(
-            modelId = "gpt-4o-mini",
-            displayName = "GPT-4o Mini",
-            description = "OpenAI — hızlı ve ekonomik",
-            isFree = false
-        )
+        ModelProvider("deep_synthesis_v4", "Deep_Synthesis_v4", "Nöral Sentez & Kod Geliştirme", true),
+        ModelProvider("linguist_mainframe", "Linguist_Mainframe", "Doğal Dil İşleme & Çeviri", true),
+        ModelProvider("vision_oracle_x", "Vision_Oracle_X", "Görüntü İşleme & Analiz", false),
+        ModelProvider("cognitive_aura_v2", "Cognitive_Aura_v2", "Semantik Karar Verme", false)
     )
-
-    private var activeModel: ModelProvider = models.first()
 
     fun getAllModels(): List<ModelProvider> = models
 
-    fun getActiveModel(): ModelProvider = activeModel
-
-    fun setActiveModel(model: ModelProvider) {
-        activeModel = model
+    fun getActiveModel(): ModelProvider {
+        val currentId = TheiaApiClient.getModelName()
+        return models.firstOrNull { it.modelId.equals(currentId, ignoreCase = true) } ?: models.first()
     }
 
-    fun findById(modelId: String): ModelProvider? =
-        models.find { it.modelId == modelId }
+    fun setActiveModel(model: ModelProvider) {
+        TheiaApiClient.updateModelName(model.modelId)
+    }
 }

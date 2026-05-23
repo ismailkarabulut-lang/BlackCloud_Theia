@@ -21,11 +21,15 @@ import com.blackcloud.shell.voice.VoiceInputManager
 import com.blackcloud.shell.voice.VoiceOutputManager
 import com.blackcloud.shell.voice.VoiceResult
 import com.blackcloud.shell.ui.theme.ThemeType
+import com.blackcloud.shell.data.repository.HistoryRepository
+import com.blackcloud.shell.data.database.ChatSessionEntity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -155,7 +159,15 @@ class BlackCloudViewModel(
     private val _currentPendingAction = MutableStateFlow<ActionType?>(null)
     val currentPendingAction = _currentPendingAction.asStateFlow()
 
-    private val sessionId = UUID.randomUUID().toString()
+    private val historyRepository = HistoryRepository(context)
+
+    val chatSessions = historyRepository.allSessions.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    private var sessionId = UUID.randomUUID().toString()
 
     init {
         // Foreground service'den gelen canlı bağlantı bilgisini izliyoruz
@@ -264,6 +276,67 @@ class BlackCloudViewModel(
     }
 
     /**
+     * Starts a brand new blank chat session, freeing the view.
+     */
+    fun startNewChat() {
+        chatStreamJob?.cancel()
+        sessionId = UUID.randomUUID().toString()
+        val introMessage = if (_activeProject.value != null) {
+            "${_activeProject.value!!.name} projesi yüklendi. Size nasıl destek olabilirim?"
+        } else {
+            "Genel Sohbet başlatıldı. Herhangi bir projeyi seçebilir veya bana genel bir soru yöneltebilirsiniz."
+        }
+        _messages.value = listOf(
+            Message(
+                id = UUID.randomUUID().toString(),
+                sender = MessageSender.ASSISTANT,
+                text = introMessage,
+                isComplete = true
+            )
+        )
+    }
+
+    /**
+     * Loads messages and state from an existing historical chat session.
+     */
+    fun loadChatSession(targetSessionId: String) {
+        chatStreamJob?.cancel()
+        sessionId = targetSessionId
+        viewModelScope.launch {
+            val pastMessages = historyRepository.getMessagesForSession(targetSessionId)
+            val currentSessions = historyRepository.allSessions.stateIn(viewModelScope).value
+            val target = currentSessions.find { it.id == targetSessionId }
+            if (target != null) {
+                // Restore project context
+                _activeProject.value = _projects.value.find { it.id == target.projectId }
+            }
+            _messages.value = pastMessages
+        }
+    }
+
+    /**
+     * Deletes a specified chat session from local storage.
+     */
+    fun deleteChatSession(targetSessionId: String) {
+        viewModelScope.launch {
+            historyRepository.deleteSession(targetSessionId)
+            if (sessionId == targetSessionId) {
+                startNewChat()
+            }
+        }
+    }
+
+    /**
+     * Clears all local chat session data from the device.
+     */
+    fun clearAllChatHistory() {
+        viewModelScope.launch {
+            historyRepository.clearHistory()
+            startNewChat()
+        }
+    }
+
+    /**
      * Girdi metnini günceller.
      */
     fun updateInputText(text: String) {
@@ -293,6 +366,11 @@ class BlackCloudViewModel(
         val userMsgId = UUID.randomUUID().toString()
         val formattedUserMsg = Message(id = userMsgId, sender = MessageSender.USER, text = text, isComplete = true)
         _messages.value = _messages.value + formattedUserMsg
+
+        // Yerel SQLite tablosuna yaz
+        viewModelScope.launch {
+            historyRepository.saveMessage(sessionId, formattedUserMsg, _activeProject.value?.id)
+        }
 
         // Asistan için boş mesaj taslağı oluştur
         val assistantMsgId = UUID.randomUUID().toString()
@@ -348,7 +426,13 @@ class BlackCloudViewModel(
     private fun updateAssistantMessage(msgId: String, finalText: String, isComplete: Boolean) {
         _messages.value = _messages.value.map { msg ->
             if (msg.id == msgId) {
-                msg.copy(text = finalText, isComplete = isComplete)
+                val updated = msg.copy(text = finalText, isComplete = isComplete)
+                if (isComplete) {
+                    viewModelScope.launch {
+                        historyRepository.saveMessage(sessionId, updated, _activeProject.value?.id)
+                    }
+                }
+                updated
             } else msg
         }
     }
@@ -356,7 +440,11 @@ class BlackCloudViewModel(
     private fun attachKkypMetadata(msgId: String, metadata: com.blackcloud.shell.data.model.KkypMetadata) {
         _messages.value = _messages.value.map { msg ->
             if (msg.id == msgId) {
-                msg.copy(kkyp = metadata, isComplete = true)
+                val updated = msg.copy(kkyp = metadata, isComplete = true)
+                viewModelScope.launch {
+                    historyRepository.saveMessage(sessionId, updated, _activeProject.value?.id)
+                }
+                updated
             } else msg
         }
     }
@@ -364,7 +452,11 @@ class BlackCloudViewModel(
     private fun markAssistantMessageComplete(msgId: String) {
         _messages.value = _messages.value.map { msg ->
             if (msg.id == msgId) {
-                msg.copy(isComplete = true)
+                val updated = msg.copy(isComplete = true)
+                viewModelScope.launch {
+                    historyRepository.saveMessage(sessionId, updated, _activeProject.value?.id)
+                }
+                updated
             } else msg
         }
     }

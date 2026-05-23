@@ -5,7 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +28,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -84,9 +91,14 @@ fun ChatWorkspaceScreen(
     onStopVoice: () -> Unit,
     onLongClickMessage: (Message) -> Unit,
     onBack: () -> Unit,
+    sessions: List<com.blackcloud.shell.data.database.ChatSessionEntity> = emptyList(),
+    onLoadSession: (String) -> Unit = {},
+    onDeleteSession: (String) -> Unit = {},
+    onStartNewChat: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
+    var showHistoryDialog by remember { mutableStateOf(false) }
 
     // Yeni mesaj veya chunk eklendiğinde listenin otomatik olarak en alta kayması
     LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
@@ -187,6 +199,30 @@ fun ChatWorkspaceScreen(
                     }
                 }
             }
+
+            // Yeni Sohbet ve Geçmiş İşlemleri
+            IconButton(
+                onClick = onStartNewChat,
+                modifier = Modifier.testTag("chat_new_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Yeni Sohbet Başlat",
+                    tint = TextPrimary
+                )
+            }
+
+            IconButton(
+                onClick = { showHistoryDialog = true },
+                modifier = Modifier.testTag("chat_history_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "Sohbet Geçmişi",
+                    tint = TextPrimary
+                )
+            }
+
             // Durum Göstergesi (Light pulse logic)
             Box(
                 modifier = Modifier
@@ -295,6 +331,134 @@ fun ChatWorkspaceScreen(
                     tint = if (inputText.trim().isNotEmpty() && connectionStatus == ConnectionStatus.CONNECTED)
                         MaterialTheme.colorScheme.primary else TextSecondary
                 )
+            }
+        }
+
+        // --- YEREL BELLEK GEÇMİŞ DIALOG ---
+        if (showHistoryDialog) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showHistoryDialog = false }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF0D1B2A))
+                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "YEREL BELLEK SOHBETLERİ",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                            )
+                            IconButton(onClick = { showHistoryDialog = false }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Kapat",
+                                    tint = TextSecondary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (sessions.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(150.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Yerel hafızada kayıtlı sohbet bulunamadı.",
+                                    style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary)
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(280.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(sessions) { session ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0x11FFFFFF))
+                                            .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                onLoadSession(session.id)
+                                                showHistoryDialog = false
+                                            }
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = session.title,
+                                                style = MaterialTheme.typography.bodyLarge.copy(
+                                                    color = TextPrimary,
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Model: ${session.modelId ?: "Varsayılan"}",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontSize = 10.sp
+                                                )
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { onDeleteSession(session.id) }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Sil",
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    onStartNewChat()
+                                    showHistoryDialog = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Yeni Sohbet")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

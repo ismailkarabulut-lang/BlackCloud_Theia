@@ -67,6 +67,7 @@ fun BlackCloudMainScreen(
     val isListening = viewModel.isListening.collectAsStateWithLifecycle()
     val currentPendingAction = viewModel.currentPendingAction.collectAsStateWithLifecycle()
     val activeTheme = viewModel.activeTheme.collectAsStateWithLifecycle()
+    val chatSessions = viewModel.chatSessions.collectAsStateWithLifecycle()
 
     // 4 sekmeli alt barın durumunu yöneten ve senkronize eden yerel durum
     var activeTab by remember { mutableStateOf("studio") }
@@ -278,6 +279,16 @@ fun BlackCloudMainScreen(
                             },
                             onBack = {
                                 viewModel.navigateBackToProjects()
+                            },
+                            sessions = chatSessions.value,
+                            onLoadSession = { targetSessionId ->
+                                viewModel.loadChatSession(targetSessionId)
+                            },
+                            onDeleteSession = { targetSessionId ->
+                                viewModel.deleteChatSession(targetSessionId)
+                            },
+                            onStartNewChat = {
+                                viewModel.startNewChat()
                             },
                             modifier = Modifier.fillMaxSize()
                         )

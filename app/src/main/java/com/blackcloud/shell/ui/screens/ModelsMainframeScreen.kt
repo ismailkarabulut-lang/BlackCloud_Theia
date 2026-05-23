@@ -188,8 +188,8 @@ fun ModelsMainframeScreen(
                         isActive = model == activeModel,
                         onSelect = {
                             ModelManager.setActiveModel(model)
-                            activeModel = model
                             viewModel.setModelName(model.modelId)
+                            activeModel = model
                             Toast.makeText(context, "${model.displayName} aktif edildi", Toast.LENGTH_SHORT).show()
                         }
                     )

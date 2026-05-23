@@ -1,7 +1,6 @@
 package com.blackcloud.shell.ui.screens
 
 import android.widget.Toast
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,16 +16,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.blackcloud.shell.data.model.ModelManager
+import com.blackcloud.shell.data.model.ModelProvider
 import com.blackcloud.shell.ui.theme.BorderColor
-import com.blackcloud.shell.ui.theme.DarkSurface
-import com.blackcloud.shell.ui.theme.DarkSurfaceVariant
 import com.blackcloud.shell.ui.theme.TextPrimary
 import com.blackcloud.shell.ui.theme.TextSecondary
 import com.blackcloud.shell.ui.theme.siberMeshBackground
@@ -38,17 +36,8 @@ fun ModelsMainframeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var diagnosticRunning by remember { mutableStateOf(false) }
-    var diagnosticProgress by remember { mutableStateOf(0.92f) }
-    
-    val modelList = remember {
-        listOf(
-            MainframeModel("Deep_Synthesis_v4", "Nöral Sentez & Kod Geliştirme", "84%", 0.84f, "AKTİF", Color(0xFF3B82F6)),
-            MainframeModel("Linguist_Mainframe", "Doğal Dil İşleme & Çeviri", "2.4B Params", 1.0f, "HAZIR", Color(0xFF65DD96)),
-            MainframeModel("Vision_Oracle_X", "Görüntü İşleme & Analiz", "12ms Latency", 0.45f, "OPTİMİZE EDİLİYOR", Color(0xFFD946EF)),
-            MainframeModel("Cognitive_Aura_v2", "Semantik Karar Verme", "98.2% Doğruluk", 0.98f, "BEKLEMEDE", Color(0xFF06B6D4))
-        )
-    }
+    var activeModel by remember { mutableStateOf(ModelManager.getActiveModel()) }
+    val models = ModelManager.getAllModels()
 
     Box(
         modifier = modifier
@@ -63,7 +52,7 @@ fun ModelsMainframeScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Üst Başlık Bilişsel Bilgi
+            // Üst Başlık
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -104,7 +93,6 @@ fun ModelsMainframeScreen(
                     }
                 }
 
-                // Sistem Durum Hapı
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(30.dp))
@@ -134,7 +122,7 @@ fun ModelsMainframeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Tanıtım Kartı
+            // Aktif Model Kartı
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -143,7 +131,7 @@ fun ModelsMainframeScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "MAINFRAME KÜME OPTİMİZASYONU",
+                        text = "AKTİF MODEL",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
@@ -151,18 +139,21 @@ fun ModelsMainframeScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Altın oran siber nöral düğümlerin tümü aktif ve kararlı durumda çalışıyor. İş yükü dağıtımı otomatik olarak optimize edilmektedir.",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = TextSecondary,
-                            lineHeight = 16.sp
+                        text = activeModel.displayName,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
                         )
+                    )
+                    Text(
+                        text = activeModel.description,
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Modeller Başlığı
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -176,9 +167,8 @@ fun ModelsMainframeScreen(
                         letterSpacing = 1.sp
                     )
                 )
-                
                 Text(
-                    text = "${modelList.size} Aktif",
+                    text = "${models.size} Aktif",
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -188,16 +178,18 @@ fun ModelsMainframeScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Model Listesi
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(modelList) { model ->
-                    ModelMainframeItem(
+                items(models) { model ->
+                    RealModelItem(
                         model = model,
-                        onActionClicked = {
-                            Toast.makeText(context, "${model.name} eylemi tetiklendi.", Toast.LENGTH_SHORT).show()
+                        isActive = model == activeModel,
+                        onSelect = {
+                            ModelManager.setActiveModel(model)
+                            activeModel = model
+                            Toast.makeText(context, "${model.displayName} aktif edildi", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -205,7 +197,7 @@ fun ModelsMainframeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Donanım Telemetrisi Alt Kısmı
+            // Donanım Telemetrisi
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -224,7 +216,6 @@ fun ModelsMainframeScreen(
                         Text("74°C / 98%", style = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary, fontWeight = FontWeight.Bold))
                     }
                 }
-
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -245,27 +236,35 @@ fun ModelsMainframeScreen(
     }
 }
 
-data class MainframeModel(
-    val name: String,
-    val description: String,
-    val stat: String,
-    val progress: Float,
-    val statusText: String,
-    val color: Color
-)
-
 @Composable
-fun ModelMainframeItem(
-    model: MainframeModel,
-    onActionClicked: () -> Unit
+fun RealModelItem(
+    model: ModelProvider,
+    isActive: Boolean,
+    onSelect: () -> Unit
 ) {
+    val accentColor = when {
+        isActive -> Color(0xFF4FC3F7)
+        model.isFree -> Color(0xFF65DD96)
+        else -> Color(0xFFFF9800)
+    }
+    val statusText = when {
+        isActive -> "AKTİF"
+        model.isFree -> "HAZIR"
+        else -> "API KEY GEREKLİ"
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onActionClicked() },
+            .clickable { onSelect() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x08FFFFFF)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isActive) Color(0xFF0D1B2A) else Color(0x08FFFFFF)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isActive) Color(0xFF4FC3F7).copy(alpha = 0.5f) else BorderColor
+        )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -275,30 +274,35 @@ fun ModelMainframeItem(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = model.name,
-                        style = MaterialTheme.typography.titleMedium.copy(color = TextPrimary, fontWeight = FontWeight.Bold),
+                        text = model.displayName,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = model.description,
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary, fontSize = 11.sp),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                
                 Box(
                     modifier = Modifier
                         .size(30.dp)
                         .clip(CircleShape)
-                        .background(model.color.copy(alpha = 0.15f)),
+                        .background(accentColor.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Model",
-                        tint = model.color,
+                        contentDescription = null,
+                        tint = accentColor,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -312,24 +316,33 @@ fun ModelMainframeItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = model.statusText,
-                    style = MaterialTheme.typography.labelSmall.copy(color = model.color, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = accentColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
                 )
-                Text(
-                    text = model.stat,
-                    style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary, fontSize = 10.sp)
-                )
+                if (!model.isFree) {
+                    Text(
+                        text = "Ücretli",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                    )
+                }
             }
 
-            if (model.progress < 1.0f) {
+            if (isActive) {
                 Spacer(modifier = Modifier.height(6.dp))
                 LinearProgressIndicator(
-                    progress = { model.progress },
+                    progress = { 1f },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp)),
-                    color = model.color,
+                    color = accentColor,
                     trackColor = Color(0x11FFFFFF)
                 )
             }

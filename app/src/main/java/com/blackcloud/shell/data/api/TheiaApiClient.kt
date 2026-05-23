@@ -15,7 +15,6 @@ import java.util.concurrent.TimeUnit
  */
 object TheiaApiClient {
 
-    // VM IP'si dynamic — VM yeniden başlarsa bu değişebilir, o zaman buradan güncelle.
     private const val BASE_URL = "http://10.202.60.1:8000/api/"
 
     private val moshi: Moshi = Moshi.Builder()

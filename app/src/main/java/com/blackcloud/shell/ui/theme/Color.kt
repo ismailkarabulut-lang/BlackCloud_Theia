@@ -1,22 +1,95 @@
 // === app/src/main/java/com/blackcloud/shell/ui/theme/Color.kt ===
 package com.blackcloud.shell.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
  * THEIA BLACKCLOUD temasına ait renk paleti.
- * Minimalist, koyu ve siber-estetik (cyberpunk) detaylara sahip yeşil tonları içerir.
+ * CompositionLocal ve MaterialTheme desteğiyle dinamik temalandırmayı destekler.
  */
 
-val DarkBackground = Color(0xFF0A0A0A) // Ultra koyu minimalist arka plan
-val DarkSurface = Color(0xFF141414) // Klasik Elegant Dark kart yüzeyi
-val DarkSurfaceVariant = Color(0xFF1A1A1A) // Giriş alanları ve ikincil paneller için koyu gölge
+data class CustomThemeColors(
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val borderColor: Color
+)
 
-val CyberGreen = Color(0xFF3B82F6) // Elegant Mavi akışlar ve butonlar için (Theia premium)
-val DarkGreen = Color(0xFF1D4ED8) // Koyu mavi gölge / ikincil tonlar
-val AlertRed = Color(0xFFEF4444) // Sorunsuz alert kırmızısı
+val LocalCustomColors = staticCompositionLocalOf {
+    CustomThemeColors(
+        textPrimary = Color(0xFFE2E8F0),
+        textSecondary = Color(0xFF94A3B8),
+        borderColor = Color(0xFF1E293B)
+    )
+}
+
+val DarkBackground: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.background
+
+val DarkSurface: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.surface
+
+val DarkSurfaceVariant: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.surfaceVariant
+
+val CyberGreen: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.primary
+
+val DarkGreen: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.secondary
+
+val AlertRed: Color
+    @Composable
+    get() = MaterialTheme.colorScheme.error
+
 val WarningOrange = Color(0xFFF59E0B) // Uyarı tonu (Amber)
 
-val TextPrimary = Color(0xFFE2E8F0) // Slate 200 birincil metinler
-val TextSecondary = Color(0xFF94A3B8) // Slate 400 ikincil metinler
-val BorderColor = Color(0xFF1E293B) // Slate 800 zarif sınırlar
+val TextPrimary: Color
+    @Composable
+    get() = LocalCustomColors.current.textPrimary
+
+val TextSecondary: Color
+    @Composable
+    get() = LocalCustomColors.current.textSecondary
+
+val BorderColor: Color
+    @Composable
+    get() = LocalCustomColors.current.borderColor
+
+/**
+ * Siber örgü (mesh gradient) arka plan çizici modifier bileşeni.
+ * Tasarımdaki derin mavi-mor atmosferi yüksek performanslı yerel bileşenlerle çizer.
+ */
+fun Modifier.siberMeshBackground(): Modifier = this.drawBehind {
+    // Derin siber arka plan rengi
+    drawRect(color = Color(0xFF10131A))
+    
+    // Sol üst soluk siber fırça aurası (#adc6ff fırçası)
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(Color(0xFFADC6FF).copy(alpha = 0.14f), Color.Transparent),
+            center = Offset(0f, 0f),
+            radius = size.width * 1.1f
+        )
+    )
+    
+    // Sağ alt mor siber fırça aurası (#7901cd fırçası)
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(Color(0xFF7901CD).copy(alpha = 0.08f), Color.Transparent),
+            center = Offset(size.width, size.height),
+            radius = size.width * 1.1f
+        )
+    )
+}

@@ -35,8 +35,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun VoiceFab(
     isListening: Boolean,
-    onPress: () -> Unit,
-    onRelease: () -> Unit,
+    onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Animasyonlu Dalga Göstergesi (Infinite wave effect)
@@ -81,29 +80,17 @@ fun VoiceFab(
 
         // Ana FAB Butonu
         FloatingActionButton(
-            onClick = {}, // Tıklanmayı handle etmeyip doğrudan jest algılayıcıyı kullanacağız
+            onClick = { onToggle() },
             shape = CircleShape,
             containerColor = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
             contentColor = if (isListening) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .size(56.dp)
                 .testTag("voice_input_fab")
-                .pointerInput(isListening) {
-                    detectTapGestures(
-                        onPress = {
-                            try {
-                                onPress()
-                                awaitRelease()
-                            } finally {
-                                onRelease()
-                            }
-                        }
-                    )
-                }
         ) {
             Icon(
                 imageVector = Icons.Default.Mic,
-                contentDescription = if (isListening) "Dinleniyor..." else "Konuşmak için basılı tutun",
+                contentDescription = if (isListening) "Dinleniyor..." else "Konuşmak için dokun",
                 modifier = Modifier.size(28.dp)
             )
         }

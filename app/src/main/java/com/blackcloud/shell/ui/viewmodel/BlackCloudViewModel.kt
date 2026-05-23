@@ -19,6 +19,7 @@ import com.blackcloud.shell.service.BlackCloudForegroundService
 import com.blackcloud.shell.voice.VoiceInputManager
 import com.blackcloud.shell.voice.VoiceOutputManager
 import com.blackcloud.shell.voice.VoiceResult
+import com.blackcloud.shell.ui.theme.ThemeType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,25 @@ class BlackCloudViewModel(
     private val voiceInputManager: VoiceInputManager,
     private val voiceOutputManager: VoiceOutputManager
 ) : ViewModel() {
+
+    // Tema seçimi ve SharedPreferences ile kalıcı depolama
+    private val themePrefs = context.getSharedPreferences("theia_theme_prefs", Context.MODE_PRIVATE)
+    private val _activeTheme = MutableStateFlow(loadPersistedTheme())
+    val activeTheme = _activeTheme.asStateFlow()
+
+    private fun loadPersistedTheme(): ThemeType {
+        val savedName = themePrefs.getString("selected_theme", ThemeType.ELEGANT_DARK.name)
+        return try {
+            ThemeType.valueOf(savedName ?: ThemeType.ELEGANT_DARK.name)
+        } catch (e: Exception) {
+            ThemeType.ELEGANT_DARK
+        }
+    }
+
+    fun setTheme(themeType: ThemeType) {
+        _activeTheme.value = themeType
+        themePrefs.edit().putString("selected_theme", themeType.name).apply()
+    }
 
     // Ekran durumları
     enum class Screen {
@@ -129,6 +149,55 @@ class BlackCloudViewModel(
                 isComplete = true
             )
         )
+    }
+
+    /**
+     * Genel sohbeti başlatıp sohbet odasına yönlendirir.
+     */
+    fun selectGeneralChat() {
+        _activeProject.value = null
+        _currentScreen.value = Screen.ChatWorkspace
+        if (_messages.value.isEmpty()) {
+            _messages.value = listOf(
+                Message(
+                    id = UUID.randomUUID().toString(),
+                    sender = MessageSender.ASSISTANT,
+                    text = "Genel Sohbet başlatıldı. Herhangi bir projeyi seçebilir veya bana genel bir soru yöneltebilirsiniz.",
+                    isComplete = true
+                )
+            )
+        }
+    }
+
+    /**
+     * Çalışma alanındaki proje bağlamını dinamik olarak değiştirir.
+     */
+    fun setWorkspaceProject(project: Project?) {
+        _activeProject.value = project
+        val projectName = project?.name ?: "Genel Sohbet"
+        _messages.value = _messages.value + Message(
+            id = UUID.randomUUID().toString(),
+            sender = MessageSender.ASSISTANT,
+            text = "Çalışma alanı değiştirildi: $projectName. Sohbet bağlamı güncellendi.",
+            isComplete = true
+        )
+    }
+
+    /**
+     * Ekran geçişlerini koordine eder.
+     */
+    fun navigateToScreen(screen: Screen) {
+        _currentScreen.value = screen
+        if (screen == Screen.ChatWorkspace && _activeProject.value == null && _messages.value.isEmpty()) {
+            _messages.value = listOf(
+                Message(
+                    id = UUID.randomUUID().toString(),
+                    sender = MessageSender.ASSISTANT,
+                    text = "Genel Sohbet başlatıldı. Herhangi bir projeyi seçebilir veya bana genel bir soru yöneltebilirsiniz.",
+                    isComplete = true
+                )
+            )
+        }
     }
 
     /**
@@ -254,11 +323,22 @@ class BlackCloudViewModel(
         sttJob = viewModelScope.launch {
             voiceInputManager.startListening().collect { result ->
                 when (result) {
+                    is VoiceResult.Partial -> {
+                        _voiceInputText.value = result.text
+                    }
                     is VoiceResult.Success -> {
                         _voiceInputText.value = result.text
+                        _isListening.value = false
+                        voiceInputManager.stopListening()
+                        val voiceText = result.text.trim()
+                        if (voiceText.isNotEmpty()) {
+                            triggerChatQuery(voiceText)
+                        }
+                        sttJob?.cancel()
                     }
                     is VoiceResult.Error -> {
                         _isListening.value = false
+                        sttJob?.cancel()
                     }
                     else -> {}
                 }

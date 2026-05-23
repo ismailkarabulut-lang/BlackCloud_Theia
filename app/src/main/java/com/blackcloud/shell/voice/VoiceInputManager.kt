@@ -19,6 +19,7 @@ sealed class VoiceResult {
     object Idle : VoiceResult()
     object Ready : VoiceResult()
     object Listening : VoiceResult()
+    data class Partial(val text: String) : VoiceResult()
     data class Success(val text: String) : VoiceResult()
     data class Error(val error: String) : VoiceResult()
 }
@@ -41,8 +42,15 @@ class VoiceInputManager(private val context: Context) {
             return@callbackFlow
         }
 
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-        speechRecognizer = recognizer
+        var recognizer: SpeechRecognizer? = null
+        try {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+            speechRecognizer = recognizer
+        } catch (e: Exception) {
+            trySend(VoiceResult.Error("Ses tanıma servis başlatma hatası: ${e.localizedMessage}"))
+            close()
+            return@callbackFlow
+        }
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -93,19 +101,30 @@ class VoiceInputManager(private val context: Context) {
             override fun onPartialResults(partialResults: Bundle?) {
                 val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!matches.isNullOrEmpty()) {
-                    trySend(VoiceResult.Success(matches[0]))
+                    trySend(VoiceResult.Partial(matches[0]))
                 }
             }
 
             override fun onEvent(eventType: Int, params: Bundle?) {}
         }
 
-        recognizer.setRecognitionListener(listener)
-        recognizer.startListening(intent)
+        try {
+            recognizer.setRecognitionListener(listener)
+            recognizer.startListening(intent)
+        } catch (e: Exception) {
+            trySend(VoiceResult.Error("Dinleme başlatma hatası: ${e.localizedMessage}"))
+            close()
+        }
 
         awaitClose {
-            recognizer.stopListening()
-            recognizer.destroy()
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    recognizer.stopListening()
+                    recognizer.destroy()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
             speechRecognizer = null
         }
     }
@@ -114,6 +133,12 @@ class VoiceInputManager(private val context: Context) {
      * Dinlemeyi elle durdurur.
      */
     fun stopListening() {
-        speechRecognizer?.stopListening()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                speechRecognizer?.stopListening()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }

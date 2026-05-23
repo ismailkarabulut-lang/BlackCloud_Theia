@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +37,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +60,7 @@ import com.blackcloud.shell.ui.theme.BorderColor
 import com.blackcloud.shell.ui.theme.DarkSurfaceVariant
 import com.blackcloud.shell.ui.theme.TextPrimary
 import com.blackcloud.shell.ui.theme.TextSecondary
+import com.blackcloud.shell.ui.theme.siberMeshBackground
 
 /**
  * PROJECT THEIA BLACKCLOUD Sohbet Çalışma Odası (Workspace).
@@ -62,7 +70,9 @@ import com.blackcloud.shell.ui.theme.TextSecondary
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatWorkspaceScreen(
-    project: Project,
+    project: Project?,
+    projectsList: List<Project>,
+    onSelectProject: (Project?) -> Unit,
     messages: List<Message>,
     inputText: String,
     onInputChanged: (String) -> Unit,
@@ -88,7 +98,7 @@ fun ChatWorkspaceScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .siberMeshBackground()
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
@@ -111,26 +121,71 @@ fun ChatWorkspaceScreen(
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column(
-                modifier = Modifier.weight(1f)
+
+            var dropdownExpanded by remember { mutableStateOf(false) }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { dropdownExpanded = true }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .testTag("workspace_selector_btn")
             ) {
-                Text(
-                    text = "AKTİF WORKSPACE",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 11.sp,
-                        letterSpacing = 1.sp
+                Column {
+                    Text(
+                        text = "AKTİF WORKSPACE ▾",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 11.sp,
+                            letterSpacing = 1.sp
+                        )
                     )
-                )
-                Text(
-                    text = project.name,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    Text(
+                        text = project?.name ?: "Genel Sohbet Kabuğu",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false },
+                    modifier = Modifier.background(DarkSurfaceVariant)
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "Genel Sohbet Kabuğu",
+                                color = if (project == null) MaterialTheme.colorScheme.primary else TextPrimary,
+                                fontWeight = if (project == null) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            onSelectProject(null)
+                            dropdownExpanded = false
+                        }
+                    )
+                    projectsList.forEach { proj ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    proj.name,
+                                    color = if (project?.id == proj.id) MaterialTheme.colorScheme.primary else TextPrimary,
+                                    fontWeight = if (project?.id == proj.id) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                onSelectProject(proj)
+                                dropdownExpanded = false
+                            }
+                        )
+                    }
+                }
             }
             // Durum Göstergesi (Light pulse logic)
             Box(
@@ -188,8 +243,7 @@ fun ChatWorkspaceScreen(
             // Bas-Konuş Mikrofon FAB'ı (Alt Sağ Köşe) (Page 3)
             VoiceFab(
                 isListening = isListening,
-                onPress = onStartVoice,
-                onRelease = onStopVoice,
+                onToggle = { if (isListening) onStopVoice() else onStartVoice() },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(bottom = 16.dp, end = 16.dp)

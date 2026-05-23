@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.collectAsState
 import com.blackcloud.shell.service.BlackCloudForegroundService
 import com.blackcloud.shell.ui.screens.BlackCloudMainScreen
 import com.blackcloud.shell.ui.theme.TheiaTheme
@@ -58,7 +59,8 @@ class MainActivity : ComponentActivity() {
         intent?.let { handleVoiceIntent(it) }
 
         setContent {
-            TheiaTheme {
+            val activeThemeState = viewModel.activeTheme.collectAsState()
+            TheiaTheme(themeType = activeThemeState.value) {
                 BlackCloudMainScreen(
                     viewModel = viewModel,
                     modifier = Modifier.fillMaxSize()

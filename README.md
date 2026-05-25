@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BlackCloud_Theia — Android Mimarisi v4.0</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&family=Rajdhani:wght@300;400;500;600&display=swap');
 
 :root {
   --bg: #03020a;

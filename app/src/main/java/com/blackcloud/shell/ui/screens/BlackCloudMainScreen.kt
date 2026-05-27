@@ -69,12 +69,12 @@ fun BlackCloudMainScreen(
     val activeTheme = viewModel.activeTheme.collectAsStateWithLifecycle()
     val chatSessions = viewModel.chatSessions.collectAsStateWithLifecycle()
 
-    // 4 sekmeli alt barın durumunu yöneten ve senkronize eden yerel durum
-    var activeTab by remember { mutableStateOf("studio") }
+    // 3 sekmeli alt barın durumunu yöneten ve senkronize eden yerel durum
+    var activeTab by remember { mutableStateOf("chat") }
 
     LaunchedEffect(currentScreen.value) {
         activeTab = when (currentScreen.value) {
-            BlackCloudViewModel.Screen.ProjectSwitcher -> "studio"
+            BlackCloudViewModel.Screen.ProjectSwitcher -> "chat"
             BlackCloudViewModel.Screen.ChatWorkspace -> "chat"
         }
     }
@@ -96,39 +96,7 @@ fun BlackCloudMainScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
-                // 1. Studio Sekmesi
-                val studioSelected = activeTab == "studio"
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { 
-                            activeTab = "studio"
-                            viewModel.navigateToScreen(BlackCloudViewModel.Screen.ProjectSwitcher)
-                        }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LibraryBooks,
-                        contentDescription = "Studio",
-                        tint = if (studioSelected) MaterialTheme.colorScheme.primary else TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "STUDIO",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            color = if (studioSelected) MaterialTheme.colorScheme.primary else TextSecondary,
-                            fontWeight = if (studioSelected) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 9.sp,
-                            letterSpacing = 0.5.sp
-                        )
-                    )
-                }
-
-                // 2. Chat Sekmesi
+                // 1. Chat Sekmesi
                 val chatSelected = activeTab == "chat"
                 Column(
                     modifier = Modifier
@@ -231,22 +199,6 @@ fun BlackCloudMainScreen(
                 label = "ScreenTransition"
             ) { tab ->
                 when (tab) {
-                    "studio" -> {
-                        ProjectSwitcherScreen(
-                            projects = projects.value,
-                            onProjectSelected = { project ->
-                                viewModel.selectProject(project)
-                            },
-                            onGeneralChatSelected = {
-                                viewModel.selectGeneralChat()
-                            },
-                            selectedTheme = activeTheme.value,
-                            onThemeSelected = { theme ->
-                                viewModel.setTheme(theme)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
                     "chat" -> {
                         ChatWorkspaceScreen(
                             project = activeProject.value,
@@ -278,7 +230,7 @@ fun BlackCloudMainScreen(
                                 viewModel.speakMessage(message.text)
                             },
                             onBack = {
-                                viewModel.navigateBackToProjects()
+                                // Geri gitme eylemini devre dışı bırakıyoruz buralarda.
                             },
                             sessions = chatSessions.value,
                             onLoadSession = { targetSessionId ->
@@ -289,6 +241,9 @@ fun BlackCloudMainScreen(
                             },
                             onStartNewChat = {
                                 viewModel.startNewChat()
+                            },
+                            onCreateLocalTask = { title, description, dateIso, location ->
+                                viewModel.createLocalTaskReminder(title, description, dateIso, location)
                             },
                             modifier = Modifier.fillMaxSize()
                         )

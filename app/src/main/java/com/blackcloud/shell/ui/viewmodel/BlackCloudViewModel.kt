@@ -125,7 +125,7 @@ class BlackCloudViewModel(
         ChatWorkspace
     }
 
-    private val _currentScreen = MutableStateFlow(Screen.ProjectSwitcher)
+    private val _currentScreen = MutableStateFlow(Screen.ChatWorkspace)
     val currentScreen = _currentScreen.asStateFlow()
 
     // Projeler listesi ve seçili proje
@@ -170,6 +170,16 @@ class BlackCloudViewModel(
     private var sessionId = UUID.randomUUID().toString()
 
     init {
+        // Gelişmiş Sohbet Kabuğu için varsayılan karşılama mesajını tanımla
+        _messages.value = listOf(
+            Message(
+                id = UUID.randomUUID().toString(),
+                sender = MessageSender.ASSISTANT,
+                text = "Gelişmiş Sohbet Kabuğu aktif. Size nasıl destek olabilirim?",
+                isComplete = true
+            )
+        )
+
         // Foreground service'den gelen canlı bağlantı bilgisini izliyoruz
         viewModelScope.launch {
             BlackCloudForegroundService.isBackendAlive.collect { isAlive ->
@@ -585,6 +595,41 @@ class BlackCloudViewModel(
                 else -> "unknown"
             }
             repository.reportActionResult(actionId, false, "Kullanıcı işlemi reddetti (Gatekeeper engeli).")
+        }
+    }
+
+    /**
+     * Chat ekranından doğrudan takvim entegreli yerel görev kurgular.
+     */
+    fun createLocalTaskReminder(title: String, description: String, dateIso: String, location: String) {
+        viewModelScope.launch {
+            val success = CalendarHelper.createEvent(
+                context = context,
+                title = title,
+                startTimeIso = dateIso,
+                endTimeIso = dateIso,
+                description = description,
+                location = location
+            )
+            
+            val feedbackMsgId = UUID.randomUUID().toString()
+            val feedbackText = if (success) {
+                "📅 **Yeni Görev Takvime Eklendi!**\n\n**Başlık:** $title\n**Zaman:** $dateIso\n**Açıklama:** $description\n**Konum:** $location\n\n*Görev hatırlatıcınız yerel takvim veritabanı ile başarıyla senkronize edildi.*"
+            } else {
+                "❌ **Takvim Hatası!**\n\n'$title' görevi takvime eklenirken bir hata oluştu veya takvim yazma izinleri eksik. Lütfen ayarlardan takvim izinlerini kontrol edin."
+            }
+            
+            val feedbackMsg = Message(
+                id = feedbackMsgId,
+                sender = MessageSender.ASSISTANT,
+                text = feedbackText,
+                isComplete = true
+            )
+            
+            _messages.value = _messages.value + feedbackMsg
+            
+            // Yerel SQLite tablosuna kaydet
+            historyRepository.saveMessage(sessionId, feedbackMsg, _activeProject.value?.id)
         }
     }
 

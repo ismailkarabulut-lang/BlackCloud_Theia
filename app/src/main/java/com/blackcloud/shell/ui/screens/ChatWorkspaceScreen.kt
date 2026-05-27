@@ -32,6 +32,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CalendarToday
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -95,10 +100,12 @@ fun ChatWorkspaceScreen(
     onLoadSession: (String) -> Unit = {},
     onDeleteSession: (String) -> Unit = {},
     onStartNewChat: () -> Unit = {},
+    onCreateLocalTask: (title: String, description: String, dateIso: String, location: String) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showTaskDialog by remember { mutableStateOf(false) }
 
     // Yeni mesaj veya chunk eklendiğinde listenin otomatik olarak en alta kayması
     LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
@@ -119,85 +126,32 @@ fun ChatWorkspaceScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.testTag("chat_back_btn")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Geri Dön",
-                    tint = TextPrimary
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-
-            var dropdownExpanded by remember { mutableStateOf(false) }
-
-            Box(
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { dropdownExpanded = true }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag("workspace_selector_btn")
+                    .padding(vertical = 4.dp)
             ) {
-                Column {
-                    Text(
-                        text = "AKTİF WORKSPACE ▾",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 11.sp,
-                            letterSpacing = 1.sp
-                        )
+                Text(
+                    text = "THEIA BLACKCLOUD",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = project?.name ?: "Genel Sohbet Kabuğu",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = dropdownExpanded,
-                    onDismissRequest = { dropdownExpanded = false },
-                    modifier = Modifier.background(DarkSurfaceVariant)
-                ) {
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                "Genel Sohbet Kabuğu",
-                                color = if (project == null) MaterialTheme.colorScheme.primary else TextPrimary,
-                                fontWeight = if (project == null) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        onClick = {
-                            onSelectProject(null)
-                            dropdownExpanded = false
-                        }
-                    )
-                    projectsList.forEach { proj ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    proj.name,
-                                    color = if (project?.id == proj.id) MaterialTheme.colorScheme.primary else TextPrimary,
-                                    fontWeight = if (project?.id == proj.id) FontWeight.Bold else FontWeight.Normal
-                                )
-                            },
-                            onClick = {
-                                onSelectProject(proj)
-                                dropdownExpanded = false
-                            }
-                        )
-                    }
-                }
+                )
+                Text(
+                    text = "Gelişmiş Sohbet Kabuğu",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
             // Yeni Sohbet ve Geçmiş İşlemleri
@@ -294,6 +248,18 @@ fun ChatWorkspaceScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Görev ve Hatırlatıcı Kurgulama Kısayol Butonu
+            IconButton(
+                onClick = { showTaskDialog = true },
+                modifier = Modifier.testTag("chat_calendar_task_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CalendarToday,
+                    contentDescription = "Görev ve Hatırlatıcı Kurgula",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
             TextField(
                 value = inputText,
                 onValueChange = onInputChanged,
@@ -455,6 +421,224 @@ fun ChatWorkspaceScreen(
                                 Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Yeni Sohbet")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- GÖREV & HATIRLATICI KURGULAYICI DIALOG ---
+        if (showTaskDialog) {
+            val formatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+            var taskTitle by remember { mutableStateOf("") }
+            var taskDesc by remember { mutableStateOf("") }
+            var taskLocation by remember { mutableStateOf("") }
+            var taskDateTime by remember { mutableStateOf(formatter.format(Date(System.currentTimeMillis() + 3600_000))) }
+            var validationError by remember { mutableStateOf<String?>(null) }
+
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showTaskDialog = false }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF0D1B2A))
+                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "GÖREV & HATIRLATICI KURGULA",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                            )
+                            IconButton(onClick = { showTaskDialog = false }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Kapat",
+                                    tint = TextSecondary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // TextField 1: Başlık
+                        TextField(
+                            value = taskTitle,
+                            onValueChange = { taskTitle = it; validationError = null },
+                            placeholder = { Text("Görev Başlığı", color = TextSecondary) },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1B263B),
+                                unfocusedContainerColor = Color(0xFF1B263B),
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = BorderColor
+                            ),
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // TextField 2: Açıklama
+                        TextField(
+                            value = taskDesc,
+                            onValueChange = { taskDesc = it },
+                            placeholder = { Text("Detaylı Açıklama", color = TextSecondary) },
+                            maxLines = 3,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1B263B),
+                                unfocusedContainerColor = Color(0xFF1B263B),
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = BorderColor
+                            ),
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // TextField 3: Konum
+                        TextField(
+                            value = taskLocation,
+                            onValueChange = { taskLocation = it },
+                            placeholder = { Text("Konum (Opsiyonel)", color = TextSecondary) },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1B263B),
+                                unfocusedContainerColor = Color(0xFF1B263B),
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = BorderColor
+                            ),
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // TextField 4: Tarih Saat
+                        TextField(
+                            value = taskDateTime,
+                            onValueChange = { taskDateTime = it },
+                            placeholder = { Text("Zamanlama (YYYY-AA-GG SS:DD)", color = TextSecondary) },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1B263B),
+                                unfocusedContainerColor = Color(0xFF1B263B),
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = BorderColor
+                            ),
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Quick Pick Timing Chips (Hızlı Seçim Çipleri)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // 1 Saat Sonra
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF1B263B))
+                                    .clickable {
+                                        val cal = Calendar.getInstance()
+                                        cal.add(Calendar.HOUR_OF_DAY, 1)
+                                        taskDateTime = formatter.format(cal.time)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text("+1 Saat", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Yarın
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF1B263B))
+                                    .clickable {
+                                        val cal = Calendar.getInstance()
+                                        cal.add(Calendar.DAY_OF_YEAR, 1)
+                                        taskDateTime = formatter.format(cal.time)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text("Yarın", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // 3 Gün Sonra
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF1B263B))
+                                    .clickable {
+                                        val cal = Calendar.getInstance()
+                                        cal.add(Calendar.DAY_OF_YEAR, 3)
+                                        taskDateTime = formatter.format(cal.time)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text("3 Gün Sonra", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (validationError != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = validationError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (taskTitle.trim().isEmpty()) {
+                                        validationError = "Lütfen bir görev başlığı girin!"
+                                        return@Button
+                                    }
+                                    // Parse and validate date-time format
+                                    val finalIso = try {
+                                        val dateObj = formatter.parse(taskDateTime)
+                                        val isoOut = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                                        isoOut.format(dateObj ?: Date())
+                                    } catch (e: Exception) {
+                                        validationError = "Hatalı Tarih Formatı! Örn: YYYY-AA-GG SS:DD"
+                                        null
+                                    }
+
+                                    if (finalIso != null) {
+                                        onCreateLocalTask(taskTitle, taskDesc, finalIso, taskLocation)
+                                        showTaskDialog = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Takvime Kaydet")
                             }
                         }
                     }
